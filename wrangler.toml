@@ -1,0 +1,10 @@
+name = "home-automation"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "."
+
+# Local dev KV binding (id is auto-generated for `wrangler dev` local mode).
+# In the Cloudflare dashboard, you'll bind the SAME variable name (LIGHTS_KV)
+# to a real KV namespace for production — see DEPLOY.md.
+[[kv_namespaces]]
+binding = "LIGHTS_KV"
+id = "local-dev-placeholder"
