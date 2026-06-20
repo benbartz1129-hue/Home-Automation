@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="Home Lights" />
+<title>Home Light Controls</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f5f5f3;
+    --surface: #ffffff;
+    --surface2: #f0efed;
+    --border: rgba(0,0,0,0.1);
+    --border2: rgba(0,0,0,0.18);
+    --text: #1a1a1a;
+    --text2: #5a5a5a;
+    --text3: #999;
+    --green: #1D9E75;
+    --green-light: #E1F5EE;
+    --green-dark: #085041;
+    --green-mid: #0F6E56;
+    --red: #A32D2D;
+    --radius: 14px;
+    --radius-sm: 8px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111110;
+      --surface: #1c1c1a;
+      --surface2: #242422;
+      --border: rgba(255,255,255,0.08);
+      --border2: rgba(255,255,255,0.15);
+      --text: #f0eeea;
+      --text2: #a0a09a;
+      --text3: #666;
+      --green-light: #0a2e22;
+      --green-dark: #9FE1CB;
+      --green-mid: #5DCAA5;
+    }
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding-bottom: 2rem;
+  }
+
+  header {
+    background: var(--surface);
+    border-bottom: 0.5px solid var(--border);
+    padding: 1rem 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .header-left { display: flex; align-items: center; gap: 10px; }
+  .header-icon { font-size: 22px; color: var(--green); }
+  .header-title { font-size: 17px; font-weight: 600; color: var(--text); }
+  .header-sub { font-size: 12px; color: var(--text3); margin-top: 1px; }
+
+  #status-badge {
+    font-size: 12px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 20px;
+    background: var(--surface2);
+    color: var(--text2);
+    border: 0.5px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+  }
+  #status-badge.on { background: var(--green-light); color: var(--green-dark); border-color: var(--green); }
+  #status-badge.error { background: #FCEBEB; color: var(--red); border-color: var(--red); }
+
+  main { padding: 1.25rem; max-width: 540px; margin: 0 auto; }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--text3);
+    margin-bottom: 10px;
+  }
+
+  #btn-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin-bottom: 1.5rem;
+  }
+
+  .light-btn {
+    background: var(--surface);
+    border: 0.5px solid var(--border2);
+    border-radius: var(--radius);
+    padding: 16px 14px 14px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    position: relative;
+    transition: background 0.12s, border-color 0.12s;
+    text-align: left;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+  .light-btn:active { transform: scale(0.97); }
+  .light-btn.active { border-color: var(--green); background: var(--green-light); }
+  .light-btn.active .btn-icon { color: var(--green); }
+  .light-btn.active .btn-name { color: var(--green-dark); }
+  .light-btn.active .btn-meta { color: var(--green-mid); }
+  .light-btn.disabled { opacity: 0.5; pointer-events: none; }
+
+  .btn-icon { font-size: 24px; color: var(--text2); margin-bottom: 2px; }
+  .btn-name { font-size: 14px; font-weight: 600; color: var(--text); }
+  .btn-meta { font-size: 12px; color: var(--text2); }
+  .btn-hint { font-size: 11px; color: var(--text3); }
+  .btn-countdown { font-size: 12px; font-weight: 600; color: var(--green-mid); }
+
+  .btn-delete {
+    position: absolute; top: 8px; right: 8px;
+    background: none; border: none; cursor: pointer;
+    color: var(--text3); font-size: 16px; padding: 2px 4px;
+    border-radius: 6px; line-height: 1;
+  }
+  .btn-delete:active { background: #FCEBEB; color: var(--red); }
+
+  .timer-bar-wrap {
+    height: 3px; background: var(--border); border-radius: 2px;
+    margin-top: 4px; overflow: hidden;
+  }
+  .timer-bar {
+    height: 100%; background: var(--green);
+    border-radius: 2px; transition: width 1s linear;
+  }
+
+  hr.divider { border: none; border-top: 0.5px solid var(--border); margin: 1.5rem 0; }
+
+  .add-toggle {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 14px; font-weight: 500; color: var(--text2);
+    background: none; border: none; cursor: pointer;
+    padding: 0; margin-bottom: 12px;
+  }
+  .add-toggle i { font-size: 18px; }
+
+  .creator {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+    display: none;
+  }
+  .creator.open { display: block; }
+  .creator h3 { font-size: 15px; font-weight: 600; margin-bottom: 1rem; }
+
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  .form-group { display: flex; flex-direction: column; gap: 4px; }
+  .form-group label { font-size: 12px; color: var(--text2); font-weight: 500; }
+  .form-group input, .form-group select {
+    background: var(--surface2);
+    border: 0.5px solid var(--border2);
+    border-radius: var(--radius-sm);
+    padding: 9px 10px;
+    font-size: 14px;
+    color: var(--text);
+    width: 100%;
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .form-group select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23999' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px; }
+  .form-group input:focus, .form-group select:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(29,158,117,0.12); }
+
+  .save-btn {
+    width: 100%; padding: 12px;
+    background: var(--green); color: white;
+    border: none; border-radius: var(--radius-sm);
+    font-size: 15px; font-weight: 600; cursor: pointer;
+    margin-top: 6px; display: flex; align-items: center;
+    justify-content: center; gap: 6px;
+  }
+  .save-btn:active { transform: scale(0.98); background: var(--green-mid); }
+  .save-btn:disabled { opacity: 0.6; }
+
+  .info-card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+    font-size: 13px;
+    color: var(--text2);
+    line-height: 1.6;
+  }
+  .info-card strong { color: var(--text); font-weight: 600; }
+  .info-card code {
+    font-family: 'SF Mono', 'Fira Mono', monospace;
+    font-size: 11px;
+    background: var(--surface2);
+    border: 0.5px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 5px;
+    display: block;
+    margin-top: 6px;
+    word-break: break-all;
+    color: var(--text);
+  }
+  .info-card p + p { margin-top: 8px; }
+
+  .empty-state {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: var(--text3);
+    font-size: 14px;
+  }
+  .empty-state i { font-size: 36px; display: block; margin-bottom: 8px; }
+
+  .toast {
+    position: fixed; bottom: 20px; left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--text); color: var(--bg);
+    padding: 10px 18px; border-radius: 24px;
+    font-size: 13px; font-weight: 500;
+    opacity: 0; transition: opacity 0.2s, transform 0.2s;
+    pointer-events: none; z-index: 100;
+    white-space: nowrap;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  @media (max-width: 360px) {
+    #btn-grid { grid-template-columns: 1fr 1fr; }
+    .form-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <i class="ti ti-smart-home header-icon" aria-hidden="true"></i>
+    <div>
+      <div class="header-title">Home Lights</div>
+      <div class="header-sub">Shared with your household</div>
+    </div>
+  </div>
+  <div id="status-badge"><i class="ti ti-circle" aria-hidden="true"></i> <span id="status-text">Loading…</span></div>
+</header>
+
+<main>
+  <p class="section-label">Controls</p>
+  <div id="btn-grid"></div>
+
+  <hr class="divider" />
+
+  <button class="add-toggle" id="toggle-btn" onclick="toggleCreator()">
+    <i class="ti ti-plus" aria-hidden="true"></i> <span id="toggle-label">Add a light control</span>
+  </button>
+
+  <div class="creator" id="creator">
+    <h3>New light control</h3>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="f-name">Button name</label>
+        <input type="text" id="f-name" placeholder="Kids' room" />
+      </div>
+      <div class="form-group">
+        <label for="f-room">Room / device</label>
+        <input type="text" id="f-room" placeholder="Kids Bedroom" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="f-dur">On duration</label>
+        <select id="f-dur">
+          <option value="5">5 minutes</option>
+          <option value="10">10 minutes</option>
+          <option value="15" selected>15 minutes</option>
+          <option value="20">20 minutes</option>
+          <option value="30">30 minutes</option>
+          <option value="45">45 minutes</option>
+          <option value="60">1 hour</option>
+          <option value="120">2 hours</option>
+          <option value="custom">Custom…</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="f-bright">Brightness</label>
+        <select id="f-bright">
+          <option value="25">25% — dim</option>
+          <option value="50">50% — half</option>
+          <option value="75" selected>75% — bright</option>
+          <option value="100">100% — full</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group" id="custom-row" style="display:none; margin-bottom:10px;">
+      <label for="f-custom">Custom minutes</label>
+      <input type="number" id="f-custom" min="1" max="480" placeholder="e.g. 25" />
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="f-icon">Icon</label>
+        <select id="f-icon">
+          <option value="ti-bulb">Bulb</option>
+          <option value="ti-lamp">Lamp</option>
+          <option value="ti-moon">Night light</option>
+          <option value="ti-sun">Full bright</option>
+          <option value="ti-bed">Bedtime</option>
+          <option value="ti-book">Reading</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="f-color">Color temp</label>
+        <select id="f-color">
+          <option value="warm">Warm white</option>
+          <option value="cool">Cool white</option>
+          <option value="daylight">Daylight</option>
+          <option value="soft">Soft yellow</option>
+        </select>
+      </div>
+    </div>
+    <button class="save-btn" id="save-btn-el" onclick="addButton()">
+      <i class="ti ti-plus" aria-hidden="true"></i> Add control
+    </button>
+  </div>
+
+  <hr class="divider" />
+
+  <p class="section-label">Connect to Google Home</p>
+  <div class="info-card">
+    <p>Each button updates the shared database here. To make it actually switch your bulbs, connect a bridge that watches this database and calls your bulbs:</p>
+    <p><strong>Option 1 — Home Assistant</strong> (recommended): poll <code>GET /api/timers</code> from an automation, or have Home Assistant call <code>POST /api/timers</code> when you ask Google Assistant.</p>
+    <p><strong>Option 2 — IFTTT Webhooks</strong>: "If Google Assistant says X" → Webhooks action → POST to this site's <code>/api/timers</code> endpoint.</p>
+    <p><strong>Option 3 — Node-RED</strong>: wire a webhook node to both this API and your bulb's local API (Hue, LIFX, Kasa, etc).</p>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API_BUTTONS = '/api/buttons';
+const API_TIMERS = '/api/timers';
+const POLL_MS = 4000;
+
+let buttons = [];
+let timers = {};
+let nextId = 1;
+let creatorOpen = false;
+let pollHandle = null;
+let lastSyncFailed = false;
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+function fmtTime(sec) {
+  const m = Math.floor(sec / 60), s = sec % 60;
+  if (m > 0) return m + 'm ' + s.toString().padStart(2, '0') + 's';
+  return s + 's';
+}
+
+function setConnectionStatus(ok) {
+  lastSyncFailed = !ok;
+  if (!ok) {
+    const badge = document.getElementById('status-badge');
+    badge.className = 'error';
+    document.getElementById('status-text').textContent = 'Can\\u2019t reach server';
+  }
+}
+
+async function fetchButtons() {
+  const res = await fetch(API_BUTTONS);
+  if (!res.ok) throw new Error('buttons fetch failed');
+  const data = await res.json();
+  return data.buttons || [];
+}
+
+async function saveButtons(list) {
+  const res = await fetch(API_BUTTONS, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ buttons: list }),
+  });
+  if (!res.ok) throw new Error('buttons save failed');
+  return res.json();
+}
+
+async function fetchTimers() {
+  const res = await fetch(API_TIMERS);
+  if (!res.ok) throw new Error('timers fetch failed');
+  const data = await res.json();
+  return data.timers || {};
+}
+
+async function postTimerAction(id, action, durationMinutes) {
+  const res = await fetch(API_TIMERS, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, action, durationMinutes }),
+  });
+  if (!res.ok) throw new Error('timer action failed');
+  return res.json();
+}
+
+function toggleCreator() {
+  creatorOpen = !creatorOpen;
+  document.getElementById('creator').classList.toggle('open', creatorOpen);
+  document.getElementById('toggle-label').textContent = creatorOpen ? 'Cancel' : 'Add a light control';
+  document.querySelector('#toggle-btn i').className = creatorOpen ? 'ti ti-x' : 'ti ti-plus';
+}
+
+document.getElementById('f-dur').addEventListener('change', function () {
+  document.getElementById('custom-row').style.display = this.value === 'custom' ? 'flex' : 'none';
+});
+
+async function addButton() {
+  const name = document.getElementById('f-name').value.trim();
+  const room = document.getElementById('f-room').value.trim();
+  const durVal = document.getElementById('f-dur').value;
+  const duration = durVal === 'custom' ? (parseInt(document.getElementById('f-custom').value) || 15) : parseInt(durVal);
+  const brightness = parseInt(document.getElementById('f-bright').value);
+  const icon = document.getElementById('f-icon').value;
+  const color = document.getElementById('f-color').value;
+  if (!name || !room) { alert('Please enter a name and room.'); return; }
+
+  const saveBtnEl = document.getElementById('save-btn-el');
+  saveBtnEl.disabled = true;
+  try {
+    const newBtn = { id: nextId++, name, room, duration, brightness, icon, color };
+    const updated = [...buttons, newBtn];
+    await saveButtons(updated);
+    buttons = updated;
+    renderGrid();
+    document.getElementById('f-name').value = '';
+    document.getElementById('f-room').value = '';
+    toggleCreator();
+    showToast('Added \\u2014 your wife will see this too');
+  } catch (e) {
+    alert('Could not save. Check your connection and try again.');
+  } finally {
+    saveBtnEl.disabled = false;
+  }
+}
+
+async function deleteButton(id, e) {
+  e.stopPropagation();
+  if (!confirm('Remove this control for everyone?')) return;
+  try {
+    const updated = buttons.filter(b => b.id !== id);
+    await saveButtons(updated);
+    buttons = updated;
+    if (timers[id]) { await postTimerAction(id, 'stop'); delete timers[id]; }
+    renderGrid();
+    showToast('Removed');
+  } catch (e) {
+    alert('Could not remove. Check your connection and try again.');
+  }
+}
+
+async function activateButton(id) {
+  const btn = buttons.find(b => b.id === id);
+  if (!btn) return;
+  const el = document.getElementById('lb-' + id);
+  if (el) el.classList.add('disabled');
+  try {
+    if (timers[id]) {
+      await postTimerAction(id, 'stop');
+      delete timers[id];
+    } else {
+      await postTimerAction(id, 'start', btn.duration);
+      timers[id] = { startedAt: Date.now(), endsAt: Date.now() + btn.duration * 60000 };
+    }
+    renderGrid();
+    updateStatus();
+  } catch (e) {
+    showToast('Could not reach server \\u2014 try again');
+  } finally {
+    if (el) el.classList.remove('disabled');
+  }
+}
+
+function updateStatus() {
+  const badge = document.getElementById('status-badge');
+  const txt = document.getElementById('status-text');
+  const active = Object.keys(timers).length;
+  if (active > 0) {
+    badge.className = 'on';
+    txt.textContent = active === 1 ? '1 light on' : active + ' lights on';
+    badge.querySelector('i').className = 'ti ti-bulb';
+  } else {
+    badge.className = '';
+    txt.textContent = 'All off';
+    badge.querySelector('i').className = 'ti ti-circle';
+  }
+}
+
+function renderGrid() {
+  const grid = document.getElementById('btn-grid');
+  if (buttons.length === 0) {
+    grid.innerHTML = '<div class="empty-state"><i class="ti ti-bulb-off"></i>No controls yet.<br>Add one below.</div>';
+    return;
+  }
+  grid.innerHTML = '';
+  buttons.forEach(btn => {
+    const t = timers[btn.id];
+    const isActive = !!t;
+    const dur = btn.duration >= 60 ? (btn.duration / 60) + 'h' : btn.duration + 'm';
+    let remSec = 0, pct = 100;
+    if (isActive) {
+      remSec = Math.max(0, Math.round((t.endsAt - Date.now()) / 1000));
+      const totalSec = btn.duration * 60;
+      pct = Math.max(0, Math.round((remSec / totalSec) * 100));
+    }
+    const div = document.createElement('div');
+    div.className = 'light-btn' + (isActive ? ' active' : '');
+    div.id = 'lb-' + btn.id;
+    div.setAttribute('role', 'button');
+    div.setAttribute('aria-label', btn.name + (isActive ? ', on' : ', off'));
+    div.onclick = () => activateButton(btn.id);
+    div.innerHTML = `
+      <button class="btn-delete" onclick="deleteButton(${btn.id}, event)" aria-label="Remove ${btn.name}">
+        <i class="ti ti-x" aria-hidden="true"></i>
+      </button>
+      <i class="ti ${btn.icon} btn-icon" aria-hidden="true"></i>
+      <span class="btn-name">${btn.name}</span>
+      <span class="btn-meta">${btn.room}</span>
+      <span class="btn-meta">${dur} \\u00b7 ${btn.brightness}%</span>
+      ${isActive
+        ? `<div class="timer-bar-wrap"><div class="timer-bar" style="width:${pct}%"></div></div>
+           <span class="btn-countdown" data-ends="${t.endsAt}">${fmtTime(remSec)} left</span>`
+        : `<span class="btn-hint">Tap to turn on</span>`}
+    `;
+    grid.appendChild(div);
+  });
+}
+
+// Tick countdowns locally every second between polls, for smooth UI
+function tickCountdowns() {
+  document.querySelectorAll('.btn-countdown').forEach(el => {
+    const ends = parseInt(el.dataset.ends, 10);
+    const remSec = Math.max(0, Math.round((ends - Date.now()) / 1000));
+    el.textContent = fmtTime(remSec) + ' left';
+    if (remSec <= 0) {
+      // Will be cleaned up on next poll
+      const card = el.closest('.light-btn');
+      if (card) card.classList.add('disabled');
+    }
+  });
+}
+
+async function syncAll(showErrors) {
+  try {
+    const [btns, tms] = await Promise.all([fetchButtons(), fetchTimers()]);
+    buttons = btns;
+    timers = tms;
+    nextId = Math.max(0, ...buttons.map(b => b.id)) + 1;
+    renderGrid();
+    updateStatus();
+    lastSyncFailed = false;
+  } catch (e) {
+    if (showErrors) setConnectionStatus(false);
+  }
+}
+
+async function init() {
+  await syncAll(true);
+  setInterval(() => syncAll(false), POLL_MS);
+  setInterval(tickCountdowns, 1000);
+}
+
+init();
+</script>
+</body>
+</html>
