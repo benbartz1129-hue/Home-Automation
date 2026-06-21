@@ -2,7 +2,12 @@
 //
 // Shared "which lights are currently on" state, so both users see live status.
 // GET  /api/timers   -> { timers: { [buttonId]: { startedAt, endsAt } } }
-// POST /api/timers   -> body: { id, action: "start"|"stop", durationMinutes }
+// POST /api/timers   -> body: { id, action: "start"|"stop"|"adjust", durationMinutes }
+//   - "start":  begins a new timer for durationMinutes (0 is treated as stop)
+//   - "stop":   clears the timer (light off)
+//   - "adjust": sets the REMAINING time on an already-running timer to
+//               durationMinutes, without resetting startedAt. Used by the
+//               slider on an active button. 0 stops the timer.
 
 const STORAGE_KEY = "timers";
 
@@ -60,11 +65,27 @@ export async function onRequestPost(context) {
       });
     }
     const timers = await readTimers(env);
+    const now = Date.now();
+    const mins = Math.max(0, Math.min(30, Number(durationMinutes) || 0));
+
     if (action === "start") {
-      const now = Date.now();
-      timers[id] = { startedAt: now, endsAt: now + (durationMinutes || 15) * 60 * 1000 };
+      if (mins <= 0) {
+        delete timers[id];
+      } else {
+        timers[id] = { startedAt: now, endsAt: now + mins * 60 * 1000 };
+      }
     } else if (action === "stop") {
       delete timers[id];
+    } else if (action === "adjust") {
+      if (mins <= 0) {
+        delete timers[id];
+      } else if (timers[id]) {
+        // Keep the original startedAt, just move the end time.
+        timers[id] = { ...timers[id], endsAt: now + mins * 60 * 1000 };
+      } else {
+        // No existing timer to adjust — treat like a fresh start.
+        timers[id] = { startedAt: now, endsAt: now + mins * 60 * 1000 };
+      }
     }
     await env.LIGHTS_KV.put(STORAGE_KEY, JSON.stringify(timers));
     return new Response(JSON.stringify({ ok: true, timers }), {
