@@ -188,6 +188,51 @@
   .form-group select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23999' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px; }
   .form-group input:focus, .form-group select:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(29,158,117,0.12); }
 
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    background: var(--border2);
+    border-radius: 2px;
+    outline: none;
+    padding: 0;
+    margin: 10px 0 2px;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--green);
+    cursor: pointer;
+    border: 2px solid var(--surface);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--green);
+    cursor: pointer;
+    border: 2px solid var(--surface);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  }
+  input[type="range"].mini-slider {
+    height: 3px;
+    margin: 6px 0 2px;
+  }
+  input[type="range"].mini-slider::-webkit-slider-thumb {
+    width: 16px; height: 16px;
+  }
+  input[type="range"].mini-slider::-moz-range-thumb {
+    width: 16px; height: 16px;
+  }
+
+  .timer-slider-row { margin-top: 4px; }
+  .timer-slider-label {
+    display: flex; justify-content: space-between;
+    font-size: 11px; color: var(--green-mid); margin-bottom: 2px;
+  }
+
   .save-btn {
     width: 100%; padding: 12px;
     background: var(--green); color: white;
@@ -286,18 +331,8 @@
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label for="f-dur">On duration</label>
-        <select id="f-dur">
-          <option value="5">5 minutes</option>
-          <option value="10">10 minutes</option>
-          <option value="15" selected>15 minutes</option>
-          <option value="20">20 minutes</option>
-          <option value="30">30 minutes</option>
-          <option value="45">45 minutes</option>
-          <option value="60">1 hour</option>
-          <option value="120">2 hours</option>
-          <option value="custom">Custom…</option>
-        </select>
+        <label for="f-dur">On duration — <span id="f-dur-val">15</span> min</label>
+        <input type="range" id="f-dur" min="0" max="30" step="1" value="15" class="duration-slider" />
       </div>
       <div class="form-group">
         <label for="f-bright">Brightness</label>
@@ -308,10 +343,6 @@
           <option value="100">100% — full</option>
         </select>
       </div>
-    </div>
-    <div class="form-group" id="custom-row" style="display:none; margin-bottom:10px;">
-      <label for="f-custom">Custom minutes</label>
-      <input type="number" id="f-custom" min="1" max="480" placeholder="e.g. 25" />
     </div>
     <div class="form-row">
       <div class="form-group">
@@ -364,6 +395,7 @@ let nextId = 1;
 let creatorOpen = false;
 let pollHandle = null;
 let lastSyncFailed = false;
+let isDragging = false;
 
 function showToast(msg) {
   const t = document.getElementById('toast');
@@ -429,15 +461,14 @@ function toggleCreator() {
   document.querySelector('#toggle-btn i').className = creatorOpen ? 'ti ti-x' : 'ti ti-plus';
 }
 
-document.getElementById('f-dur').addEventListener('change', function () {
-  document.getElementById('custom-row').style.display = this.value === 'custom' ? 'flex' : 'none';
+document.getElementById('f-dur').addEventListener('input', function () {
+  document.getElementById('f-dur-val').textContent = this.value;
 });
 
 async function addButton() {
   const name = document.getElementById('f-name').value.trim();
   const room = document.getElementById('f-room').value.trim();
-  const durVal = document.getElementById('f-dur').value;
-  const duration = durVal === 'custom' ? (parseInt(document.getElementById('f-custom').value) || 15) : parseInt(durVal);
+  const duration = Math.max(0, Math.min(30, parseInt(document.getElementById('f-dur').value, 10) || 0));
   const brightness = parseInt(document.getElementById('f-bright').value);
   const icon = document.getElementById('f-icon').value;
   const color = document.getElementById('f-color').value;
@@ -487,8 +518,9 @@ async function activateButton(id) {
       await postTimerAction(id, 'stop');
       delete timers[id];
     } else {
-      await postTimerAction(id, 'start', btn.duration);
-      timers[id] = { startedAt: Date.now(), endsAt: Date.now() + btn.duration * 60000 };
+      const startMinutes = btn.duration > 0 ? btn.duration : 15;
+      await postTimerAction(id, 'start', startMinutes);
+      timers[id] = { startedAt: Date.now(), endsAt: Date.now() + startMinutes * 60000 };
     }
     renderGrid();
     updateStatus();
@@ -497,6 +529,37 @@ async function activateButton(id) {
   } finally {
     if (el) el.classList.remove('disabled');
   }
+}
+
+const adjustDebounce = {};
+function adjustTimerLive(id, minutesEl, labelEl) {
+  // Update the label instantly for responsiveness, then debounce the network call.
+  const mins = parseInt(minutesEl.value, 10);
+  labelEl.textContent = mins + ' min left';
+  clearTimeout(adjustDebounce[id]);
+  adjustDebounce[id] = setTimeout(async () => {
+    try {
+      if (mins <= 0) {
+        await postTimerAction(id, 'stop');
+        delete timers[id];
+        isDragging = false;
+        renderGrid();
+        updateStatus();
+        showToast('Turned off');
+      } else {
+        await postTimerAction(id, 'adjust', mins);
+        if (timers[id]) {
+          timers[id].endsAt = Date.now() + mins * 60000;
+        } else {
+          timers[id] = { startedAt: Date.now(), endsAt: Date.now() + mins * 60000 };
+        }
+        isDragging = false;
+      }
+    } catch (e) {
+      isDragging = false;
+      showToast('Could not update timer \\u2014 try again');
+    }
+  }, 350);
 }
 
 function updateStatus() {
@@ -524,19 +587,22 @@ function renderGrid() {
   buttons.forEach(btn => {
     const t = timers[btn.id];
     const isActive = !!t;
-    const dur = btn.duration >= 60 ? (btn.duration / 60) + 'h' : btn.duration + 'm';
-    let remSec = 0, pct = 100;
+    const dur = btn.duration + ' min';
+    let remSec = 0, remMin = 0;
     if (isActive) {
       remSec = Math.max(0, Math.round((t.endsAt - Date.now()) / 1000));
-      const totalSec = btn.duration * 60;
-      pct = Math.max(0, Math.round((remSec / totalSec) * 100));
+      remMin = Math.min(30, Math.max(0, Math.round(remSec / 60)));
     }
     const div = document.createElement('div');
     div.className = 'light-btn' + (isActive ? ' active' : '');
     div.id = 'lb-' + btn.id;
     div.setAttribute('role', 'button');
     div.setAttribute('aria-label', btn.name + (isActive ? ', on' : ', off'));
-    div.onclick = () => activateButton(btn.id);
+    div.onclick = (e) => {
+      // Ignore clicks that originate from the slider itself.
+      if (e.target.closest('.timer-slider-row')) return;
+      activateButton(btn.id);
+    };
     div.innerHTML = `
       <button class="btn-delete" onclick="deleteButton(${btn.id}, event)" aria-label="Remove ${btn.name}">
         <i class="ti ti-x" aria-hidden="true"></i>
@@ -546,8 +612,17 @@ function renderGrid() {
       <span class="btn-meta">${btn.room}</span>
       <span class="btn-meta">${dur} \\u00b7 ${btn.brightness}%</span>
       ${isActive
-        ? `<div class="timer-bar-wrap"><div class="timer-bar" style="width:${pct}%"></div></div>
-           <span class="btn-countdown" data-ends="${t.endsAt}">${fmtTime(remSec)} left</span>`
+        ? `<div class="timer-slider-row" onclick="event.stopPropagation()">
+             <div class="timer-slider-label">
+               <span class="btn-countdown" data-ends="${t.endsAt}">${fmtTime(remSec)} left</span>
+               <span id="adj-label-${btn.id}">${remMin} min left</span>
+             </div>
+             <input type="range" class="mini-slider" min="0" max="30" step="1"
+               value="${remMin}"
+               onpointerdown="isDragging=true"
+               onpointerup="setTimeout(() => isDragging=false, 400)"
+               oninput="adjustTimerLive(${btn.id}, this, document.getElementById('adj-label-${btn.id}'))" />
+           </div>`
         : `<span class="btn-hint">Tap to turn on</span>`}
     `;
     grid.appendChild(div);
@@ -574,7 +649,7 @@ async function syncAll(showErrors) {
     buttons = btns;
     timers = tms;
     nextId = Math.max(0, ...buttons.map(b => b.id)) + 1;
-    renderGrid();
+    if (!isDragging) renderGrid();
     updateStatus();
     lastSyncFailed = false;
   } catch (e) {
