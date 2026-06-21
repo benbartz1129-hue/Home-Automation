@@ -1,9 +1,0 @@
-# Minimal Wrangler config for Cloudflare Pages.
-# This ONLY declares the KV binding -- it intentionally omits
-# `pages_build_output_dir`, which previously caused Cloudflare's build
-# system to treat this project as a plain Worker and fail with
-# "wrangler deploy" errors. Keep it this way.
-
-[[kv_namespaces]]
-binding = "LIGHTS_KV"
-id = "59647c0241044a1ca7f5a00b844cae5a"
