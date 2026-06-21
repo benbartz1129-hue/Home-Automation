@@ -12,6 +12,14 @@ the same link.
 
 ## 1. Push this folder to GitHub
 
+> **Note on `wrangler.toml`:** This repo includes a minimal `wrangler.toml`
+> that declares ONLY the KV namespace binding (`LIGHTS_KV`). It deliberately
+> does **not** include `pages_build_output_dir` or a `main` entry point —
+> those settings caused Cloudflare's build system to treat this project as
+> a plain Worker (causing a `wrangler deploy` error) instead of a Pages
+> project. If you ever see that error again, check that `wrangler.toml`
+> still only contains the `[[kv_namespaces]]` block and nothing else.
+
 ```bash
 cd Home-Automation
 git init
@@ -33,15 +41,35 @@ gh repo create Home-Automation --public --source=. --push
 
 You'll get a URL like `https://home-automation.pages.dev`.
 
-## 3. Create the shared KV database
+## 3. Create the shared KV database and bind it
 
-1. Cloudflare dashboard → **Workers & Pages** → **KV** (left sidebar) → **Create namespace**
+1. Cloudflare dashboard → **Storage & Databases** → **KV** → **Create namespace**
 2. Name it `home_automation_kv`
-3. Go back to your Pages project → **Settings** → **Functions** → **KV namespace bindings**
-4. Add a binding:
-   - Variable name: `LIGHTS_KV`   (must match exactly — this is what the code looks for)
-   - KV namespace: `home_automation_kv`
-5. **Retry deployment** (Settings → Deployments → ⋯ → Retry) so the binding takes effect
+3. Copy its **ID** (a long hex string shown on the namespace page)
+4. Open `wrangler.toml` in this repo and confirm it looks like this (replace
+   the `id` with your actual namespace ID):
+
+   ```toml
+   [[kv_namespaces]]
+   binding = "LIGHTS_KV"
+   id = "YOUR_NAMESPACE_ID_HERE"
+   ```
+
+5. Commit and push:
+
+   ```bash
+   git add wrangler.toml
+   git commit -m "Add KV binding"
+   git push
+   ```
+
+6. Cloudflare redeploys automatically and picks up the binding from this
+   file — no need to use the dashboard's "Add binding" form at all (it can
+   be unreliable in some browsers/accounts).
+
+> If you ever need to double check the binding took effect, go to your
+> Pages project → **Settings** → **Bindings** — it should now show
+> `LIGHTS_KV` listed, even though you set it via the file instead of the UI.
 
 ## 4. Test it
 
