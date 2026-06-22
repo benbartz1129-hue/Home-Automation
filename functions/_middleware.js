@@ -22,7 +22,17 @@ function pinPageHtml(error) {
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Home Lights — Enter PIN</title>
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="Bartz" />
+<title>Bartz — Enter PIN</title>
+<link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
+<link rel="apple-touch-icon" sizes="152x152" href="/icons/apple-touch-icon-152.png" />
+<link rel="apple-touch-icon" sizes="120x120" href="/icons/apple-touch-icon-120.png" />
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+<link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512.png" />
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+<link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16.png" />
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -140,6 +150,16 @@ function getCookie(request, name) {
 export async function onRequest(context) {
   const { request, env, next } = context;
   const url = new URL(request.url);
+
+  // Always allow icon/static assets through, no PIN required. These are
+  // just generic image files (not app data or controls), and Safari's
+  // "Add to Home Screen" feature fetches them in the background without
+  // necessarily carrying your PIN cookie — if these were blocked, the
+  // home screen icon would silently fail and iOS would fall back to a
+  // plain letter icon instead.
+  if (url.pathname.startsWith("/icons/")) {
+    return next();
+  }
 
   // If the PIN isn't configured, fail safe by blocking everything with a
   // clear message, rather than silently leaving the site open.
