@@ -57,11 +57,13 @@ async function fireGoveeOn(env, buttonId) {
   const buttons = await readButtons(env);
   const btn = buttons.find((b) => String(b.id) === String(buttonId));
   const brightness = btn?.brightness || 75;
+  const colorMode = btn?.colorMode || "white"; // "white" or "color"
   // Newer buttons store a raw Kelvin value (colorTempK) from the slider.
   // Older buttons (created before the slider existed) only have a named
   // preset like "warm"/"cool" — fall back to that if colorTempK is absent.
   const colorTempK = btn?.colorTempK || colorNameToKelvin(btn?.color);
-  await goveeTurnOn(env, mapping.device, mapping.sku, brightness, colorTempK);
+  const hue = btn?.hue ?? 0;
+  await goveeTurnOn(env, mapping.device, mapping.sku, brightness, colorMode, colorTempK, hue);
 }
 
 export async function onRequestGet(context) {
