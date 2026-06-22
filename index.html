@@ -147,6 +147,32 @@
   }
   .btn-delete:active { background: #FCEBEB; color: var(--red); }
 
+  .btn-edit {
+    position: absolute; top: 8px; right: 32px;
+    background: none; border: none; cursor: pointer;
+    color: var(--text3); font-size: 15px; padding: 2px 4px;
+    border-radius: 6px; line-height: 1;
+  }
+  .btn-edit:active { background: var(--surface2); color: var(--text); }
+  .btn-edit.open { color: var(--green); }
+
+  .edit-panel {
+    margin-top: 6px;
+    padding-top: 8px;
+    border-top: 0.5px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .edit-row { display: flex; flex-direction: column; gap: 2px; }
+  .edit-row-label {
+    display: flex; justify-content: space-between;
+    font-size: 11px; color: var(--text2); font-weight: 500;
+  }
+  input[type="range"].color-slider {
+    background: linear-gradient(to right, #FFB454 0%, #FFE9C7 35%, #FFFFFF 55%, #CFE8FF 75%, #9FCBFF 100%);
+  }
+
   .timer-bar-wrap {
     height: 3px; background: var(--border); border-radius: 2px;
     margin-top: 4px; overflow: hidden;
@@ -318,13 +344,8 @@
         <input type="range" id="f-dur" min="0" max="30" step="1" value="15" class="duration-slider" />
       </div>
       <div class="form-group">
-        <label for="f-bright">Brightness</label>
-        <select id="f-bright">
-          <option value="25">25% — dim</option>
-          <option value="50">50% — half</option>
-          <option value="75" selected>75% — bright</option>
-          <option value="100">100% — full</option>
-        </select>
+        <label for="f-bright">Brightness — <span id="f-bright-val">75</span>%</label>
+        <input type="range" id="f-bright" min="1" max="100" step="1" value="75" />
       </div>
     </div>
     <div class="form-row">
@@ -340,13 +361,8 @@
         </select>
       </div>
       <div class="form-group">
-        <label for="f-color">Color temp</label>
-        <select id="f-color">
-          <option value="warm">Warm white</option>
-          <option value="cool">Cool white</option>
-          <option value="daylight">Daylight</option>
-          <option value="soft">Soft yellow</option>
-        </select>
+        <label for="f-color">Color temp — <span id="f-color-val">2700</span>K</label>
+        <input type="range" id="f-color" min="2000" max="9000" step="100" value="2700" class="color-slider" />
       </div>
     </div>
     <button class="save-btn" id="save-btn-el" onclick="addButton()">
@@ -369,6 +385,7 @@ let creatorOpen = false;
 let pollHandle = null;
 let lastSyncFailed = false;
 let isDragging = false;
+const openEditIds = new Set();
 
 function showToast(msg) {
   const t = document.getElementById('toast');
@@ -427,6 +444,16 @@ async function postTimerAction(id, action, durationMinutes) {
   return res.json();
 }
 
+async function postLiveUpdate(id) {
+  const res = await fetch(API_TIMERS, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, action: 'live_update' }),
+  });
+  if (!res.ok) throw new Error('live update failed');
+  return res.json();
+}
+
 function toggleCreator() {
   creatorOpen = !creatorOpen;
   document.getElementById('creator').classList.toggle('open', creatorOpen);
@@ -437,20 +464,26 @@ function toggleCreator() {
 document.getElementById('f-dur').addEventListener('input', function () {
   document.getElementById('f-dur-val').textContent = this.value;
 });
+document.getElementById('f-bright').addEventListener('input', function () {
+  document.getElementById('f-bright-val').textContent = this.value;
+});
+document.getElementById('f-color').addEventListener('input', function () {
+  document.getElementById('f-color-val').textContent = this.value;
+});
 
 async function addButton() {
   const name = document.getElementById('f-name').value.trim();
   const room = document.getElementById('f-room').value.trim();
   const duration = Math.max(0, Math.min(30, parseInt(document.getElementById('f-dur').value, 10) || 0));
-  const brightness = parseInt(document.getElementById('f-bright').value);
+  const brightness = Math.max(1, Math.min(100, parseInt(document.getElementById('f-bright').value, 10) || 75));
   const icon = document.getElementById('f-icon').value;
-  const color = document.getElementById('f-color').value;
+  const colorTempK = Math.max(2000, Math.min(9000, parseInt(document.getElementById('f-color').value, 10) || 2700));
   if (!name || !room) { alert('Please enter a name and room.'); return; }
 
   const saveBtnEl = document.getElementById('save-btn-el');
   saveBtnEl.disabled = true;
   try {
-    const newBtn = { id: nextId++, name, room, duration, brightness, icon, color };
+    const newBtn = { id: nextId++, name, room, duration, brightness, icon, colorTempK };
     const updated = [...buttons, newBtn];
     await saveButtons(updated);
     buttons = updated;
@@ -550,6 +583,38 @@ function updateStatus() {
   }
 }
 
+const settingDebounce = {};
+function updateButtonSettingLive(id, field, value, labelEl, labelSuffix) {
+  if (labelEl) labelEl.textContent = value + labelSuffix;
+  clearTimeout(settingDebounce[id + field]);
+  settingDebounce[id + field] = setTimeout(async () => {
+    try {
+      const btn = buttons.find(b => b.id === id);
+      if (!btn) return;
+      btn[field] = value;
+      await saveButtons(buttons);
+      // If this light is currently on, push the change to the real bulb now.
+      if (timers[id]) {
+        await postLiveUpdate(id);
+      }
+    } catch (e) {
+      showToast('Could not save change \\u2014 try again');
+    } finally {
+      isDragging = false;
+    }
+  }, 350);
+}
+
+function toggleEditPanel(id, event) {
+  event.stopPropagation();
+  if (openEditIds.has(id)) {
+    openEditIds.delete(id);
+  } else {
+    openEditIds.add(id);
+  }
+  renderGrid();
+}
+
 function renderGrid() {
   const grid = document.getElementById('btn-grid');
   if (buttons.length === 0) {
@@ -560,7 +625,9 @@ function renderGrid() {
   buttons.forEach(btn => {
     const t = timers[btn.id];
     const isActive = !!t;
+    const isEditing = openEditIds.has(btn.id);
     const dur = btn.duration + ' min';
+    const colorTempK = btn.colorTempK || 2700;
     let remSec = 0, remMin = 0;
     if (isActive) {
       remSec = Math.max(0, Math.round((t.endsAt - Date.now()) / 1000));
@@ -572,11 +639,14 @@ function renderGrid() {
     div.setAttribute('role', 'button');
     div.setAttribute('aria-label', btn.name + (isActive ? ', on' : ', off'));
     div.onclick = (e) => {
-      // Ignore clicks that originate from the slider itself.
-      if (e.target.closest('.timer-slider-row')) return;
+      // Ignore clicks that originate from a slider or the edit panel itself.
+      if (e.target.closest('.timer-slider-row') || e.target.closest('.edit-panel')) return;
       activateButton(btn.id);
     };
     div.innerHTML = `
+      <button class="btn-edit ${isEditing ? 'open' : ''}" onclick="toggleEditPanel(${btn.id}, event)" aria-label="Edit ${btn.name} brightness and color">
+        <i class="ti ti-adjustments" aria-hidden="true"></i>
+      </button>
       <button class="btn-delete" onclick="deleteButton(${btn.id}, event)" aria-label="Remove ${btn.name}">
         <i class="ti ti-x" aria-hidden="true"></i>
       </button>
@@ -597,6 +667,32 @@ function renderGrid() {
                oninput="adjustTimerLive(${btn.id}, this, document.getElementById('adj-label-${btn.id}'))" />
            </div>`
         : `<span class="btn-hint">Tap to turn on</span>`}
+      ${isEditing
+        ? `<div class="edit-panel" onclick="event.stopPropagation()">
+             <div class="edit-row">
+               <div class="edit-row-label">
+                 <span>Brightness</span>
+                 <span id="bright-label-${btn.id}">${btn.brightness}%</span>
+               </div>
+               <input type="range" class="mini-slider" min="1" max="100" step="1"
+                 value="${btn.brightness}"
+                 onpointerdown="isDragging=true"
+                 onpointerup="setTimeout(() => isDragging=false, 400)"
+                 oninput="updateButtonSettingLive(${btn.id}, 'brightness', parseInt(this.value,10), document.getElementById('bright-label-${btn.id}'), '%')" />
+             </div>
+             <div class="edit-row">
+               <div class="edit-row-label">
+                 <span>Color temp</span>
+                 <span id="color-label-${btn.id}">${colorTempK}K</span>
+               </div>
+               <input type="range" class="mini-slider color-slider" min="2000" max="9000" step="100"
+                 value="${colorTempK}"
+                 onpointerdown="isDragging=true"
+                 onpointerup="setTimeout(() => isDragging=false, 400)"
+                 oninput="updateButtonSettingLive(${btn.id}, 'colorTempK', parseInt(this.value,10), document.getElementById('color-label-${btn.id}'), 'K')" />
+             </div>
+           </div>`
+        : ''}
     `;
     grid.appendChild(div);
   });
