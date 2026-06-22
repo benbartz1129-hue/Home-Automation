@@ -57,7 +57,10 @@ async function fireGoveeOn(env, buttonId) {
   const buttons = await readButtons(env);
   const btn = buttons.find((b) => String(b.id) === String(buttonId));
   const brightness = btn?.brightness || 75;
-  const colorTempK = colorNameToKelvin(btn?.color);
+  // Newer buttons store a raw Kelvin value (colorTempK) from the slider.
+  // Older buttons (created before the slider existed) only have a named
+  // preset like "warm"/"cool" — fall back to that if colorTempK is absent.
+  const colorTempK = btn?.colorTempK || colorNameToKelvin(btn?.color);
   await goveeTurnOn(env, mapping.device, mapping.sku, brightness, colorTempK);
 }
 
@@ -127,6 +130,20 @@ export async function onRequestPost(context) {
         timers[id] = { startedAt: now, endsAt: now + mins * 60 * 1000 };
         await fireGoveeOn(env, id);
       }
+    } else if (action === "live_update") {
+      // Brightness/color was just changed on this button. If its light is
+      // currently on, immediately re-send the on command with the fresh
+      // values so the change is visible right away. If it's off, this is a
+      // no-op here — readButtons() in fireGoveeOn always picks up the
+      // latest saved brightness/color the NEXT time the light is turned on,
+      // since buttons.js is the source of truth for those values.
+      if (timers[id]) {
+        await fireGoveeOn(env, id);
+      }
+      // No timer state changes, so nothing to write back to KV.
+      return new Response(JSON.stringify({ ok: true, timers }), {
+        headers: { "Content-Type": "application/json", ...corsHeaders() },
+      });
     }
     await env.LIGHTS_KV.put(STORAGE_KEY, JSON.stringify(timers));
     return new Response(JSON.stringify({ ok: true, timers }), {
