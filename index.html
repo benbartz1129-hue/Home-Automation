@@ -172,6 +172,52 @@
   input[type="range"].color-slider {
     background: linear-gradient(to right, #FFB454 0%, #FFE9C7 35%, #FFFFFF 55%, #CFE8FF 75%, #9FCBFF 100%);
   }
+  input[type="range"].hue-slider {
+    background: linear-gradient(to right,
+      hsl(0,100%,50%), hsl(60,100%,50%), hsl(120,100%,50%),
+      hsl(180,100%,50%), hsl(240,100%,50%), hsl(300,100%,50%), hsl(360,100%,50%));
+  }
+
+  .mode-toggle {
+    display: flex;
+    background: var(--surface2);
+    border: 0.5px solid var(--border2);
+    border-radius: var(--radius-sm);
+    padding: 3px;
+    gap: 3px;
+  }
+  .mode-btn {
+    flex: 1;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    padding: 7px 0;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text2);
+    cursor: pointer;
+  }
+  .mode-btn.active {
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+  }
+  .mode-toggle.mini {
+    padding: 2px;
+    gap: 2px;
+  }
+  .mode-toggle.mini .mode-btn {
+    padding: 5px 0;
+    font-size: 11px;
+  }
+
+  .swatch {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    border: 1px solid var(--border2);
+    vertical-align: middle;
+  }
 
   .timer-bar-wrap {
     height: 3px; background: var(--border); border-radius: 2px;
@@ -361,8 +407,23 @@
         </select>
       </div>
       <div class="form-group">
+        <label>Light type</label>
+        <div class="mode-toggle" id="f-mode-toggle">
+          <button type="button" class="mode-btn active" data-mode="white" onclick="setCreatorMode('white')">White</button>
+          <button type="button" class="mode-btn" data-mode="color" onclick="setCreatorMode('color')">Color</button>
+        </div>
+      </div>
+    </div>
+    <div class="form-row" id="f-white-row">
+      <div class="form-group" style="grid-column: 1 / -1;">
         <label for="f-color">Color temp — <span id="f-color-val">2700</span>K</label>
         <input type="range" id="f-color" min="2000" max="9000" step="100" value="2700" class="color-slider" />
+      </div>
+    </div>
+    <div class="form-row" id="f-hue-row" style="display:none;">
+      <div class="form-group" style="grid-column: 1 / -1;">
+        <label for="f-hue">Color — <span id="f-hue-val" style="display:inline-flex;align-items:center;gap:4px;"><span class="swatch" id="f-hue-swatch"></span>hue 0\\u00b0</span></label>
+        <input type="range" id="f-hue" min="0" max="359" step="1" value="0" class="hue-slider" />
       </div>
     </div>
     <button class="save-btn" id="save-btn-el" onclick="addButton()">
@@ -471,25 +532,57 @@ document.getElementById('f-color').addEventListener('input', function () {
   document.getElementById('f-color-val').textContent = this.value;
 });
 
+// Converts hue (0-360, full saturation/brightness) to a CSS hex color,
+// purely for showing a live swatch preview next to the slider.
+function hueToHex(hue) {
+  const h = ((hue % 360) + 360) % 360;
+  const c = 1, x = 1 - Math.abs((h / 60) % 2 - 1);
+  let r=0,g=0,b=0;
+  if (h<60){r=c;g=x;b=0;} else if (h<120){r=x;g=c;b=0;}
+  else if (h<180){r=0;g=c;b=x;} else if (h<240){r=0;g=x;b=c;}
+  else if (h<300){r=x;g=0;b=c;} else {r=c;g=0;b=x;}
+  const R=Math.round(r*255), G=Math.round(g*255), B=Math.round(b*255);
+  return '#' + [R,G,B].map(v => v.toString(16).padStart(2,'0')).join('');
+}
+
+let creatorMode = 'white';
+function setCreatorMode(mode) {
+  creatorMode = mode;
+  document.querySelectorAll('#f-mode-toggle .mode-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === mode);
+  });
+  document.getElementById('f-white-row').style.display = mode === 'white' ? 'flex' : 'none';
+  document.getElementById('f-hue-row').style.display = mode === 'color' ? 'flex' : 'none';
+}
+
+document.getElementById('f-hue').addEventListener('input', function () {
+  const hue = parseInt(this.value, 10);
+  document.getElementById('f-hue-val').innerHTML =
+    `<span class="swatch" style="background:${hueToHex(hue)}"></span>hue ${hue}\\u00b0`;
+});
+
 async function addButton() {
   const name = document.getElementById('f-name').value.trim();
   const room = document.getElementById('f-room').value.trim();
   const duration = Math.max(0, Math.min(30, parseInt(document.getElementById('f-dur').value, 10) || 0));
   const brightness = Math.max(1, Math.min(100, parseInt(document.getElementById('f-bright').value, 10) || 75));
   const icon = document.getElementById('f-icon').value;
+  const colorMode = creatorMode;
   const colorTempK = Math.max(2000, Math.min(9000, parseInt(document.getElementById('f-color').value, 10) || 2700));
+  const hue = Math.max(0, Math.min(359, parseInt(document.getElementById('f-hue').value, 10) || 0));
   if (!name || !room) { alert('Please enter a name and room.'); return; }
 
   const saveBtnEl = document.getElementById('save-btn-el');
   saveBtnEl.disabled = true;
   try {
-    const newBtn = { id: nextId++, name, room, duration, brightness, icon, colorTempK };
+    const newBtn = { id: nextId++, name, room, duration, brightness, icon, colorMode, colorTempK, hue };
     const updated = [...buttons, newBtn];
     await saveButtons(updated);
     buttons = updated;
     renderGrid();
     document.getElementById('f-name').value = '';
     document.getElementById('f-room').value = '';
+    setCreatorMode('white');
     toggleCreator();
     showToast('Added \\u2014 your wife will see this too');
   } catch (e) {
@@ -615,6 +708,38 @@ function toggleEditPanel(id, event) {
   renderGrid();
 }
 
+async function setButtonColorMode(id, mode) {
+  const btn = buttons.find(b => b.id === id);
+  if (!btn) return;
+  btn.colorMode = mode;
+  // Instant visual toggle without a full re-render (avoids losing slider focus)
+  const toggle = document.getElementById('mode-toggle-' + id);
+  if (toggle) {
+    toggle.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    const idx = mode === 'white' ? 0 : 1;
+    toggle.querySelectorAll('.mode-btn')[idx]?.classList.add('active');
+  }
+  const whiteRow = document.getElementById('white-row-' + id);
+  const hueRow = document.getElementById('hue-row-' + id);
+  if (whiteRow) whiteRow.style.display = mode === 'white' ? 'flex' : 'none';
+  if (hueRow) hueRow.style.display = mode === 'color' ? 'flex' : 'none';
+  try {
+    await saveButtons(buttons);
+    if (timers[id]) await postLiveUpdate(id);
+  } catch (e) {
+    showToast('Could not save change \\u2014 try again');
+  }
+}
+
+function updateHueLive(id, hueEl) {
+  const hue = parseInt(hueEl.value, 10);
+  const labelEl = document.getElementById('hue-label-' + id);
+  if (labelEl) {
+    labelEl.innerHTML = `<span class="swatch" style="background:${hueToHex(hue)}"></span> ${hue}\\u00b0`;
+  }
+  updateButtonSettingLive(id, 'hue', hue, null, '');
+}
+
 function renderGrid() {
   const grid = document.getElementById('btn-grid');
   if (buttons.length === 0) {
@@ -628,6 +753,8 @@ function renderGrid() {
     const isEditing = openEditIds.has(btn.id);
     const dur = btn.duration + ' min';
     const colorTempK = btn.colorTempK || 2700;
+    const colorMode = btn.colorMode || 'white';
+    const hue = btn.hue ?? 0;
     let remSec = 0, remMin = 0;
     if (isActive) {
       remSec = Math.max(0, Math.round((t.endsAt - Date.now()) / 1000));
@@ -681,6 +808,13 @@ function renderGrid() {
                  oninput="updateButtonSettingLive(${btn.id}, 'brightness', parseInt(this.value,10), document.getElementById('bright-label-${btn.id}'), '%')" />
              </div>
              <div class="edit-row">
+               <div class="edit-row-label"><span>Light type</span></div>
+               <div class="mode-toggle mini" id="mode-toggle-${btn.id}">
+                 <button type="button" class="mode-btn ${colorMode === 'white' ? 'active' : ''}" onclick="setButtonColorMode(${btn.id}, 'white')">White</button>
+                 <button type="button" class="mode-btn ${colorMode === 'color' ? 'active' : ''}" onclick="setButtonColorMode(${btn.id}, 'color')">Color</button>
+               </div>
+             </div>
+             <div class="edit-row" id="white-row-${btn.id}" style="display:${colorMode === 'white' ? 'flex' : 'none'};">
                <div class="edit-row-label">
                  <span>Color temp</span>
                  <span id="color-label-${btn.id}">${colorTempK}K</span>
@@ -690,6 +824,17 @@ function renderGrid() {
                  onpointerdown="isDragging=true"
                  onpointerup="setTimeout(() => isDragging=false, 400)"
                  oninput="updateButtonSettingLive(${btn.id}, 'colorTempK', parseInt(this.value,10), document.getElementById('color-label-${btn.id}'), 'K')" />
+             </div>
+             <div class="edit-row" id="hue-row-${btn.id}" style="display:${colorMode === 'color' ? 'flex' : 'none'};">
+               <div class="edit-row-label">
+                 <span>Color</span>
+                 <span id="hue-label-${btn.id}"><span class="swatch" style="background:${hueToHex(hue)}"></span> ${hue}\\u00b0</span>
+               </div>
+               <input type="range" class="mini-slider hue-slider" min="0" max="359" step="1"
+                 value="${hue}"
+                 onpointerdown="isDragging=true"
+                 onpointerup="setTimeout(() => isDragging=false, 400)"
+                 oninput="updateHueLive(${btn.id}, this)" />
              </div>
            </div>`
         : ''}
