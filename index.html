@@ -251,30 +251,6 @@
   .save-btn:active { transform: scale(0.98); background: var(--green-mid); }
   .save-btn:disabled { opacity: 0.6; }
 
-  .info-card {
-    background: var(--surface);
-    border: 0.5px solid var(--border);
-    border-radius: var(--radius);
-    padding: 1rem 1.25rem;
-    font-size: 13px;
-    color: var(--text2);
-    line-height: 1.6;
-  }
-  .info-card strong { color: var(--text); font-weight: 600; }
-  .info-card code {
-    font-family: 'SF Mono', 'Fira Mono', monospace;
-    font-size: 11px;
-    background: var(--surface2);
-    border: 0.5px solid var(--border);
-    border-radius: 4px;
-    padding: 2px 5px;
-    display: block;
-    margin-top: 6px;
-    word-break: break-all;
-    color: var(--text);
-  }
-  .info-card p + p { margin-top: 8px; }
-
   .empty-state {
     text-align: center;
     padding: 2rem 1rem;
@@ -376,16 +352,6 @@
     <button class="save-btn" id="save-btn-el" onclick="addButton()">
       <i class="ti ti-plus" aria-hidden="true"></i> Add control
     </button>
-  </div>
-
-  <hr class="divider" />
-
-  <p class="section-label">Connect to Google Home</p>
-  <div class="info-card">
-    <p>Each button updates the shared database here. To make it actually switch your bulbs, connect a bridge that watches this database and calls your bulbs:</p>
-    <p><strong>Option 1 — Home Assistant</strong> (recommended): poll <code>GET /api/timers</code> from an automation, or have Home Assistant call <code>POST /api/timers</code> when you ask Google Assistant.</p>
-    <p><strong>Option 2 — IFTTT Webhooks</strong>: "If Google Assistant says X" → Webhooks action → POST to this site's <code>/api/timers</code> endpoint.</p>
-    <p><strong>Option 3 — Node-RED</strong>: wire a webhook node to both this API and your bulb's local API (Hue, LIFX, Kasa, etc).</p>
   </div>
 </main>
 
