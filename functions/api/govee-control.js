@@ -38,9 +38,13 @@ async function sendGoveeCommand(env, device, sku, capability) {
   }
 }
 
-// Turns a device on and sets brightness + color temperature in one go.
-// Govee requires separate capability calls, so we fire them in sequence.
-export async function goveeTurnOn(env, device, sku, brightness, colorTempK) {
+// Turns a device on and sets brightness + color (white temp OR full RGB) in
+// one go. Govee requires separate capability calls, so we fire them in
+// sequence.
+//
+// colorMode: "white" -> use colorTempK (Kelvin, 2000-9000)
+//            "color"  -> use hue (0-360 degrees, full saturation/brightness)
+export async function goveeTurnOn(env, device, sku, brightness, colorMode, colorTempK, hue) {
   const results = [];
   results.push(
     await sendGoveeCommand(env, device, sku, {
@@ -58,7 +62,16 @@ export async function goveeTurnOn(env, device, sku, brightness, colorTempK) {
       })
     );
   }
-  if (colorTempK) {
+  if (colorMode === "color" && hue !== undefined && hue !== null) {
+    const rgbInt = hueToRgbInt(hue);
+    results.push(
+      await sendGoveeCommand(env, device, sku, {
+        type: "devices.capabilities.color_setting",
+        instance: "colorRgb",
+        value: rgbInt,
+      })
+    );
+  } else if (colorTempK) {
     results.push(
       await sendGoveeCommand(env, device, sku, {
         type: "devices.capabilities.color_setting",
@@ -87,4 +100,24 @@ export function colorNameToKelvin(colorName) {
     case "daylight": return 6500;
     default: return 2700;
   }
+}
+
+// Converts a hue (0-360 degrees, full saturation + brightness) to the
+// single packed integer Govee's colorRgb capability expects
+// (0-16777215, i.e. R*65536 + G*256 + B).
+export function hueToRgbInt(hue) {
+  const h = ((Number(hue) % 360) + 360) % 360; // normalize to 0-359
+  const c = 1; // full saturation
+  const x = 1 - Math.abs(((h / 60) % 2) - 1);
+  let r = 0, g = 0, b = 0;
+  if (h < 60) { r = c; g = x; b = 0; }
+  else if (h < 120) { r = x; g = c; b = 0; }
+  else if (h < 180) { r = 0; g = c; b = x; }
+  else if (h < 240) { r = 0; g = x; b = c; }
+  else if (h < 300) { r = x; g = 0; b = c; }
+  else { r = c; g = 0; b = x; }
+  const R = Math.round(r * 255);
+  const G = Math.round(g * 255);
+  const B = Math.round(b * 255);
+  return R * 65536 + G * 256 + B;
 }
