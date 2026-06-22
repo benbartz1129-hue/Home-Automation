@@ -219,6 +219,44 @@
     vertical-align: middle;
   }
 
+  .custom-dur-toggle {
+    background: none;
+    border: none;
+    color: var(--text3);
+    font-size: 11px;
+    text-decoration: underline;
+    cursor: pointer;
+    padding: 0;
+    align-self: flex-start;
+  }
+  .custom-dur-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .custom-dur-row input[type="number"] {
+    width: 64px;
+    background: var(--surface2);
+    border: 0.5px solid var(--border2);
+    border-radius: var(--radius-sm);
+    padding: 6px 8px;
+    font-size: 13px;
+    color: var(--text);
+    text-align: center;
+  }
+  .custom-dur-row button {
+    background: var(--green);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .custom-dur-row button:active { background: var(--green-mid); }
+  .custom-dur-hint { font-size: 10px; color: var(--text3); }
+
   .timer-bar-wrap {
     height: 3px; background: var(--border); border-radius: 2px;
     margin-top: 4px; overflow: hidden;
@@ -632,7 +670,12 @@ async function activateButton(id) {
 
 const adjustDebounce = {};
 function adjustTimerLive(id, minutesEl, labelEl) {
-  // Update the label instantly for responsiveness, then debounce the network call.
+  // This slider's range is fixed at 0-30 min for quick adjustments. If a
+  // light is running a custom long duration (set via the "longer than 30
+  // min" input), this slider's displayed position is capped at 30 — but it
+  // only sends an update when actually dragged, so simply re-rendering or
+  // viewing the card never shortens a long timer. Dragging it on purpose
+  // will intentionally bring the remaining time back within 0-30 min.
   const mins = parseInt(minutesEl.value, 10);
   labelEl.textContent = mins + ' min left';
   clearTimeout(adjustDebounce[id]);
@@ -698,6 +741,46 @@ function updateButtonSettingLive(id, field, value, labelEl, labelSuffix) {
   }, 350);
 }
 
+function toggleCustomDuration(id, event) {
+  event.stopPropagation();
+  const row = document.getElementById('custom-dur-row-' + id);
+  const toggle = document.getElementById('custom-dur-toggle-' + id);
+  if (!row) return;
+  const showing = row.style.display !== 'none';
+  row.style.display = showing ? 'none' : 'flex';
+  if (toggle) toggle.style.display = showing ? 'inline' : 'none';
+  if (!showing) {
+    const input = document.getElementById('custom-dur-input-' + id);
+    if (input) input.focus();
+  }
+}
+
+async function applyCustomDuration(id, event) {
+  event.stopPropagation();
+  const input = document.getElementById('custom-dur-input-' + id);
+  if (!input) return;
+  let mins = parseInt(input.value, 10);
+  if (!mins || mins < 1) {
+    showToast('Enter a number of minutes first');
+    return;
+  }
+  mins = Math.min(180, mins);
+  try {
+    if (timers[id]) {
+      await postTimerAction(id, 'adjust', mins);
+      timers[id] = { ...timers[id], endsAt: Date.now() + mins * 60000 };
+    } else {
+      await postTimerAction(id, 'start', mins);
+      timers[id] = { startedAt: Date.now(), endsAt: Date.now() + mins * 60000 };
+    }
+    renderGrid();
+    updateStatus();
+    showToast(`Set to ${mins} min`);
+  } catch (e) {
+    showToast('Could not set duration \\u2014 try again');
+  }
+}
+
 function toggleEditPanel(id, event) {
   event.stopPropagation();
   if (openEditIds.has(id)) {
@@ -755,10 +838,11 @@ function renderGrid() {
     const colorTempK = btn.colorTempK || 2700;
     const colorMode = btn.colorMode || 'white';
     const hue = btn.hue ?? 0;
-    let remSec = 0, remMin = 0;
+    let remSec = 0, remMin = 0, sliderMin = 0;
     if (isActive) {
       remSec = Math.max(0, Math.round((t.endsAt - Date.now()) / 1000));
-      remMin = Math.min(30, Math.max(0, Math.round(remSec / 60)));
+      remMin = Math.max(0, Math.round(remSec / 60));
+      sliderMin = Math.min(30, remMin);
     }
     const div = document.createElement('div');
     div.className = 'light-btn' + (isActive ? ' active' : '');
@@ -788,7 +872,7 @@ function renderGrid() {
                <span id="adj-label-${btn.id}">${remMin} min left</span>
              </div>
              <input type="range" class="mini-slider" min="0" max="30" step="1"
-               value="${remMin}"
+               value="${sliderMin}"
                onpointerdown="isDragging=true"
                onpointerup="setTimeout(() => isDragging=false, 400)"
                oninput="adjustTimerLive(${btn.id}, this, document.getElementById('adj-label-${btn.id}'))" />
@@ -835,6 +919,14 @@ function renderGrid() {
                  onpointerdown="isDragging=true"
                  onpointerup="setTimeout(() => isDragging=false, 400)"
                  oninput="updateHueLive(${btn.id}, this)" />
+             </div>
+             <div class="edit-row">
+               <button type="button" class="custom-dur-toggle" id="custom-dur-toggle-${btn.id}" onclick="toggleCustomDuration(${btn.id}, event)">Need it on longer than 30 min?</button>
+               <div class="custom-dur-row" id="custom-dur-row-${btn.id}" style="display:none;">
+                 <input type="number" id="custom-dur-input-${btn.id}" min="1" max="180" step="1" placeholder="e.g. 90" />
+                 <button type="button" onclick="applyCustomDuration(${btn.id}, event)">Set</button>
+                 <span class="custom-dur-hint">min, up to 180</span>
+               </div>
              </div>
            </div>`
         : ''}
