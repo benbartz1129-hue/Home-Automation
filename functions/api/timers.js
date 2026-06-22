@@ -8,8 +8,10 @@
 //   - "stop":   clears the timer and turns the real Govee bulb OFF
 //   - "adjust": sets the REMAINING time on an already-running timer to
 //               durationMinutes, without resetting startedAt. Used by the
-//               slider on an active button. 0 stops the timer AND turns the
-//               bulb off.
+//               slider on an active button, or the custom-minutes input for
+//               durations over 30. 0 stops the timer AND turns the bulb off.
+//               Max allowed is 180 minutes (3 hours), enforced here
+//               server-side regardless of what the client sends.
 //
 // Note: this only fires the Govee command at the moment of the request. The
 // actual auto-off when a timer naturally expires (without anyone touching
@@ -106,7 +108,7 @@ export async function onRequestPost(context) {
     }
     const timers = await readTimers(env);
     const now = Date.now();
-    const mins = Math.max(0, Math.min(30, Number(durationMinutes) || 0));
+    const mins = Math.max(0, Math.min(180, Number(durationMinutes) || 0));
 
     if (action === "start") {
       if (mins <= 0) {
