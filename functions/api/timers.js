@@ -22,7 +22,7 @@
 import { GOVEE_DEVICES } from "./govee-devices-config.js";
 import { goveeTurnOn, goveeTurnOff, colorNameToKelvin } from "./govee-control.js";
 import { LEVITON_DEVICES } from "./leviton-devices-config.js";
-import { levitonTurnOn, levitonTurnOff } from "./leviton-control.js";
+import { levitonTurnOn, levitonTurnOff, levitonSetDimmer } from "./leviton-control.js";
 
 const STORAGE_KEY = "timers";
 const BUTTONS_KEY = "buttons";
@@ -70,10 +70,14 @@ async function fireDeviceOn(env, buttonId) {
   if (!goveeMapping && !levitonMapping) return; // Not wired to any real device yet.
 
   const tasks = [];
+  let btn = null;
+  const needsButtonData = goveeMapping || (levitonMapping && levitonMapping.dimmable);
+  if (needsButtonData) {
+    const buttons = await readButtons(env);
+    btn = buttons.find((b) => String(b.id) === String(buttonId));
+  }
 
   if (goveeMapping) {
-    const buttons = await readButtons(env);
-    const btn = buttons.find((b) => String(b.id) === String(buttonId));
     const brightness = btn?.brightness || 75;
     const colorMode = btn?.colorMode || "white"; // "white" or "color"
     // Newer buttons store a raw Kelvin value (colorTempK) from the slider.
@@ -85,8 +89,22 @@ async function fireDeviceOn(env, buttonId) {
   }
 
   if (levitonMapping) {
-    // DN15S is a basic on/off switch — no brightness or color to send.
-    tasks.push(levitonTurnOn(env, levitonMapping.switchId));
+    if (levitonMapping.dimmable) {
+      const brightness = btn?.brightness || 75;
+      tasks.push(
+        levitonSetDimmer(
+          env,
+          levitonMapping.switchId,
+          true,
+          brightness,
+          levitonMapping.minLevel ?? 10,
+          levitonMapping.maxLevel ?? 100
+        )
+      );
+    } else {
+      // Plain on/off switch (e.g. DN15S) — no brightness to send.
+      tasks.push(levitonTurnOn(env, levitonMapping.switchId));
+    }
   }
 
   if (tasks.length) await Promise.all(tasks);
