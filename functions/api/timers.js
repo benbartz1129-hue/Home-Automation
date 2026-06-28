@@ -21,6 +21,8 @@
 
 import { GOVEE_DEVICES } from "./govee-devices-config.js";
 import { goveeTurnOn, goveeTurnOff, colorNameToKelvin } from "./govee-control.js";
+import { LEVITON_DEVICES } from "./leviton-devices-config.js";
+import { levitonTurnOn, levitonTurnOff } from "./leviton-control.js";
 
 const STORAGE_KEY = "timers";
 const BUTTONS_KEY = "buttons";
@@ -47,26 +49,55 @@ async function readButtons(env) {
   return raw ? JSON.parse(raw) : [];
 }
 
-async function fireGoveeOff(env, buttonId) {
-  const mapping = GOVEE_DEVICES[buttonId];
-  if (!mapping) return; // This button isn't wired to a real bulb yet.
-  await goveeTurnOff(env, mapping.device, mapping.sku);
+// A button may map to a Govee bulb, a Leviton switch, both, or neither.
+// These helpers fire whichever real device(s) are configured for it.
+async function fireDeviceOff(env, buttonId) {
+  const goveeMapping = GOVEE_DEVICES[buttonId];
+  const levitonMapping = LEVITON_DEVICES[buttonId];
+  const tasks = [];
+  if (goveeMapping) {
+    tasks.push(goveeTurnOff(env, goveeMapping.device, goveeMapping.sku));
+  }
+  if (levitonMapping) {
+    tasks.push(levitonTurnOff(env, levitonMapping.switchId));
+  }
+  if (tasks.length) await Promise.all(tasks);
 }
 
-async function fireGoveeOn(env, buttonId) {
-  const mapping = GOVEE_DEVICES[buttonId];
-  if (!mapping) return; // This button isn't wired to a real bulb yet.
-  const buttons = await readButtons(env);
-  const btn = buttons.find((b) => String(b.id) === String(buttonId));
-  const brightness = btn?.brightness || 75;
-  const colorMode = btn?.colorMode || "white"; // "white" or "color"
-  // Newer buttons store a raw Kelvin value (colorTempK) from the slider.
-  // Older buttons (created before the slider existed) only have a named
-  // preset like "warm"/"cool" — fall back to that if colorTempK is absent.
-  const colorTempK = btn?.colorTempK || colorNameToKelvin(btn?.color);
-  const hue = btn?.hue ?? 0;
-  await goveeTurnOn(env, mapping.device, mapping.sku, brightness, colorMode, colorTempK, hue);
+async function fireDeviceOn(env, buttonId) {
+  const goveeMapping = GOVEE_DEVICES[buttonId];
+  const levitonMapping = LEVITON_DEVICES[buttonId];
+  if (!goveeMapping && !levitonMapping) return; // Not wired to any real device yet.
+
+  const tasks = [];
+
+  if (goveeMapping) {
+    const buttons = await readButtons(env);
+    const btn = buttons.find((b) => String(b.id) === String(buttonId));
+    const brightness = btn?.brightness || 75;
+    const colorMode = btn?.colorMode || "white"; // "white" or "color"
+    // Newer buttons store a raw Kelvin value (colorTempK) from the slider.
+    // Older buttons (created before the slider existed) only have a named
+    // preset like "warm"/"cool" — fall back to that if colorTempK is absent.
+    const colorTempK = btn?.colorTempK || colorNameToKelvin(btn?.color);
+    const hue = btn?.hue ?? 0;
+    tasks.push(goveeTurnOn(env, goveeMapping.device, goveeMapping.sku, brightness, colorMode, colorTempK, hue));
+  }
+
+  if (levitonMapping) {
+    // DN15S is a basic on/off switch — no brightness or color to send.
+    tasks.push(levitonTurnOn(env, levitonMapping.switchId));
+  }
+
+  if (tasks.length) await Promise.all(tasks);
 }
+
+// Kept as thin aliases so the rest of this file (and its existing comments)
+// reads the same as before — "Govee" naming has just grown to mean "any
+// configured device for this button."
+const fireGoveeOff = fireDeviceOff;
+const fireGoveeOn = fireDeviceOn;
+
 
 export async function onRequestGet(context) {
   const { env } = context;
