@@ -145,6 +145,31 @@ export async function levitonSetPower(env, switchId, on) {
   return result;
 }
 
+// Turns a Leviton DIMMER on with a specific brightness in one request.
+// DN6HD (and similar dimmers) expose minLevel/maxLevel on the device itself
+// (commonly 10-100, not 0-100 — confirmed by inspecting a real DN6HD via
+// /api/leviton-devices?switchId=...). We clamp to that device's own range
+// rather than assuming 1-100, since sending a value outside the device's
+// configured min/max may be rejected or silently clamped server-side.
+export async function levitonSetDimmer(env, switchId, on, brightness, minLevel = 10, maxLevel = 100) {
+  if (!env.LEVITON_EMAIL || !env.LEVITON_PASSWORD) {
+    console.error("LEVITON_EMAIL/LEVITON_PASSWORD not configured; skipping Leviton command.");
+    return { ok: false, error: "missing_credentials" };
+  }
+  const body = { power: on ? "ON" : "OFF" };
+  if (on && brightness !== undefined && brightness !== null) {
+    body.brightness = Math.max(minLevel, Math.min(maxLevel, Math.round(brightness)));
+  }
+  const result = await callWithAuth(env, `/IotSwitches/${switchId}`, {
+    method: "PUT",
+    body,
+  });
+  if (!result.ok) {
+    console.error("Leviton dimmer command failed", switchId, result.status, result.data);
+  }
+  return result;
+}
+
 export async function levitonTurnOn(env, switchId) {
   return levitonSetPower(env, switchId, true);
 }
