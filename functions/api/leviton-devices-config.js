@@ -26,7 +26,5 @@
 // entirely and just turn fully on/off.
 
 export const LEVITON_DEVICES = {
-  // Example — replace with your real switch id(s) from /api/leviton-devices:
-  // 6: { switchId: "123456" },                                              // plain on/off (DN15S)
-  // 7: { switchId: "2598685", dimmable: true, minLevel: 10, maxLevel: 100 }, // dimmer (DN6HD)
+  3: { switchId: "2598685", dimmable: true, minLevel: 10, maxLevel: 100 },
 };
