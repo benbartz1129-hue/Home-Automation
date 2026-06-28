@@ -37,7 +37,7 @@ async function callApi(path, { method = "GET", token, body } = {}) {
 }
 
 export async function onRequestGet(context) {
-  const { env } = context;
+  const { env, request } = context;
   try {
     if (!env.LEVITON_EMAIL || !env.LEVITON_PASSWORD) {
       return new Response(
@@ -64,6 +64,18 @@ export async function onRequestGet(context) {
     }
     const token = login.data.id;
     const userId = login.data.userId;
+
+    // Debug mode: ?switchId=2598685 fetches FULL details for one switch by
+    // ID, including dimmer-specific fields (brightness, etc) that the
+    // residence-level list endpoint below leaves out.
+    const url = new URL(request.url);
+    const debugSwitchId = url.searchParams.get("switchId");
+    if (debugSwitchId) {
+      const full = await callApi(`/IotSwitches/${debugSwitchId}`, { token });
+      return new Response(JSON.stringify({ switchId: debugSwitchId, full: full.data }, null, 2), {
+        headers: { "Content-Type": "application/json", ...corsHeaders() },
+      });
+    }
 
     // 2. Get residential permissions for this user
     const perms = await callApi(`/Person/${userId}/residentialPermissions`, { token });
